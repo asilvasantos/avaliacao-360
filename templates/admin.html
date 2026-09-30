@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel do Professor - Resultados 360°</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Painel de Resultados - Avaliação 360°</h2>
+            <a href="/" class="btn btn-outline-secondary">Ir para a página de votação</a>
+        </div>
+
+        <!-- Legenda da Escala -->
+        <div class="card mb-4 shadow-sm border-info">
+            <div class="card-header bg-info text-dark fw-bold">📖 Legenda da Escala de Avaliação (1 a 5)</div>
+            <div class="card-body small">
+                <div class="row">
+                    <div class="col-md"><strong>1:</strong> Raramente / Precisa de Desenvolvimento</div>
+                    <div class="col-md"><strong>2:</strong> Às vezes</div>
+                    <div class="col-md"><strong>3:</strong> Frequentemente (Atende às Expectativas)</div>
+                    <div class="col-md"><strong>4:</strong> Muito Frequentemente / Acima da Média</div>
+                    <div class="col-md"><strong>5:</strong> Excepcional / Referência</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="results-container">
+            <div class="text-center text-muted py-4">Carregando resultados...</div>
+        </div>
+    </div>
+
+    <!-- Modal para ver as votações individuais -->
+    <div class="modal fade" id="individualModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title" id="modalStudentName">Votações Individuais</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modalBodyContent">
+                    ...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let globalData = [];
+
+        async function loadResults() {
+            const container = document.getElementById('results-container');
+            try {
+                const res = await fetch('/api/admin/results');
+                if (!res.ok) throw new Error('Erro ao buscar dados do servidor.');
+                
+                globalData = await res.json();
+                
+                if (globalData.error) {
+                    container.innerHTML = `<div class="alert alert-danger">Erro no banco de dados: ${globalData.error}</div>`;
+                    return;
+                }
+
+                container.innerHTML = '';
+
+                if (!globalData || globalData.length === 0) {
+                    container.innerHTML = '<div class="alert alert-warning text-center">Nenhuma avaliação registrada ainda.</div>';
+                    return;
+                }
+
+                // Agrupar por Turma e depois por Equipe
+                const classes = {};
+                globalData.forEach(item => {
+                    const className = item.class_name || 'Turma 1';
+                    if (!classes[className]) {
+                        classes[className] = {};
+                    }
+                    if (!classes[className][item.team_name]) {
+                        classes[className][item.team_name] = [];
+                    }
+                    classes[className][item.team_name].push(item);
+                });
+
+                for (const [className, teams] of Object.entries(classes)) {
+                    let classHtml = `<div class="mb-5">
+                        <h3 class="border-bottom pb-2 mb-4 text-secondary">📁 ${className}</h3>`;
+
+                    for (const [teamName, students] of Object.entries(teams)) {
+                        classHtml += `
+                            <div class="card shadow mb-4">
+                                <div class="card-header bg-dark text-white">
+                                    <h5 class="mb-0">${teamName}</h5>
+                                </div>
+                                <div class="card-body">
+                        `;
+
+                        students.forEach(st => {
+                            const hasVotes = st.total_evaluations > 0;
+                            classHtml += `
+                                <div class="card mb-3 border-secondary">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="card-title text-primary mb-0">${st.student_name} <span class="badge bg-secondary fs-6">Total de envios: ${st.total_evaluations}</span></h6>
+                                            ${hasVotes ? `<button class="btn btn-outline-primary btn-sm" onclick="openIndividualModal(${st.student_id})">🔍 Comparar Votos Individuais (Anônimos)</button>` : ''}
+                                        </div>
+                            `;
+
+                            if (hasVotes) {
+                                classHtml += `
+                                    <div class="row text-center my-3 g-2 small bg-white p-2 rounded border">
+                                        <div class="col-md-4"><strong>Q. Técnica:</strong> ${st.avg_tecnica || '-'}</div>
+                                        <div class="col-md-4"><strong>Res. Problemas:</strong> ${st.avg_problemas || '-'}</div>
+                                        <div class="col-md-4"><strong>F. Teórica:</strong> ${st.avg_teoria || '-'}</div>
+                                        <div class="col-md-4"><strong>Colaboração:</strong> ${st.avg_colaboracao || '-'}</div>
+                                        <div class="col-md-4"><strong>Divisão Tarefas:</strong> ${st.avg_tarefas || '-'}</div>
+                                        <div class="col-md-4"><strong>Feedback:</strong> ${st.avg_feedback || '-'}</div>
+                                        <div class="col-md-4"><strong>Comunicação:</strong> ${st.avg_comunicacao || '-'}</div>
+                                        <div class="col-md-4"><strong>Proatividade:</strong> ${st.avg_proatividade || '-'}</div>
+                                        <div class="col-md-4"><strong>Postura:</strong> ${st.avg_postura || '-'}</div>
+                                    </div>
+                                `;
+                            } else {
+                                classHtml += `<p class="text-muted fst-italic mt-2">Ainda não recebeu avaliações.</p>`;
+                            }
+
+                            classHtml += `</div></div>`;
+                        });
+
+                        classHtml += `</div></div>`;
+                    }
+                    classHtml += `</div>`;
+                    container.innerHTML += classHtml;
+                }
+            } catch (err) {
+                container.innerHTML = `<div class="alert alert-danger text-center">Não foi possível carregar os resultados.<br><small class="text-muted">${err.message}</small></div>`;
+            }
+        }
+
+        function openIndividualModal(studentId) {
+            const student = globalData.find(s => s.student_id === studentId);
+            if (!student) return;
+
+            document.getElementById('modalStudentName').innerText = `Votações Anônimas para: ${student.student_name} (${student.team_name} - ${student.class_name})`;
+            const content = document.getElementById('modalBodyContent');
+            
+            if (!student.individual_submissions || student.individual_submissions.length === 0) {
+                content.innerHTML = `<p class="text-muted">Nenhum voto registrado.</p>`;
+                return;
+            }
+
+            let html = `<p class="text-muted small">Comparação lado a lado das notas enviadas por diferentes colegas (cada "Envio" representa um formulário enviado por um colega diferente, mantendo sigilo de quem enviou):</p>`;
+            
+            html += `<div class="table-responsive"><table class="table table-bordered table-striped small text-center align-middle">
+                <thead>
+                    <tr class="table-dark">
+                        <th>Critério</th>`;
+            
+            student.individual_submissions.forEach((sub, idx) => {
+                html += `<th>Envio Anônimo #${idx + 1}</th>`;
+            });
+            html += `</tr></thead><tbody>`;
+
+            const criteria = [
+                { key: 'q_tecnica', label: '1. Qualidade Técnica' },
+                { key: 'q_problemas', label: '2. Res. Problemas' },
+                { key: 'q_teoria', label: '3. F. Teórica' },
+                { key: 'q_colaboracao', label: '4. Colaboração' },
+                { key: 'q_tarefas', label: '5. Divisão Tarefas' },
+                { key: 'q_feedback', label: '6. Abertura Feedback' },
+                { key: 'q_comunicacao', label: '7. Comunicação' },
+                { key: 'q_proatividade', label: '8. Proatividade' },
+                { key: 'q_postura', label: '9. Postura' }
+            ];
+
+            criteria.forEach(crit => {
+                html += `<tr><td class="text-start fw-bold">${crit.label}</td>`;
+                student.individual_submissions.forEach(sub => {
+                    html += `<td><span class="badge bg-secondary">${sub[crit.key]}</span></td>`;
+                });
+                html += `</tr>`;
+            });
+
+            html += `<tr><td class="text-start fw-bold">Pontos Fortes</td>`;
+            student.individual_submissions.forEach(sub => {
+                html += `<td class="text-start text-muted">${sub.pontos_fortes || '-'}</td>`;
+            });
+            html += `</tr>`;
+
+            html += `<tr><td class="text-start fw-bold">Oportunidades</td>`;
+            student.individual_submissions.forEach(sub => {
+                html += `<td class="text-start text-muted">${sub.oportunidades || '-'}</td>`;
+            });
+            html += `</tr>`;
+
+            html += `</tbody></table></div>`;
+            content.innerHTML = html;
+
+            const modal = new bootstrap.Modal(document.getElementById('individualModal'));
+            modal.show();
+        }
+
+        loadResults();
+    </script>
+</body>
+</html>

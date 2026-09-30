@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avaliação 360° - Residência Tecnológica</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card shadow">
+                    <div class="card-body p-4">
+                        <h2 class="text-center mb-3">Avaliação 360° da Residência</h2>
+                        <div class="alert alert-info text-center small" role="alert">
+                            🔒 <strong>Avaliação 100% Anônima:</strong> A seleção do seu nome serve apenas para ocultar você da sua própria lista. Suas respostas são sigilosas e desvinculadas da sua identidade.
+                        </div>
+                        
+                        <!-- Seleção de Turma e Aluno -->
+                        <div id="login-section" class="mb-4 mt-4">
+                            <div class="mb-3">
+                                <label for="class-select" class="form-label fw-bold">1. Selecione a sua Turma:</label>
+                                <select id="class-select" class="form-select">
+                                    <option value="">-- Escolha a turma --</option>
+                                    <option value="Turma 1">Turma 1</option>
+                                    <option value="Turma 2">Turma 2</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="student-select" class="form-label fw-bold">2. Selecione o seu nome:</label>
+                                <select id="student-select" class="form-select" disabled>
+                                    <option value="">-- Primeiro escolha a turma --</option>
+                                </select>
+                            </div>
+
+                            <button id="start-btn" class="btn btn-primary mt-3 w-100" disabled>Iniciar Avaliação dos Colegas</button>
+                        </div>
+
+                        <!-- Formulário de Avaliação Dinâmico -->
+                        <form id="eval-form" class="d-none">
+                            <div id="evaluations-container"></div>
+                            <button type="submit" class="btn btn-success w-100 mt-4">Enviar Todas as Avaliações</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allStudents = [];
+        let currentStudentId = null;
+        let teamMates = [];
+
+        async function loadStudents() {
+            const res = await fetch('/api/students');
+            allStudents = await res.json();
+        }
+
+        document.getElementById('class-select').addEventListener('change', (e) => {
+            const selectedClass = e.target.value;
+            const studentSelect = document.getElementById('student-select');
+            studentSelect.innerHTML = '<option value="">-- Escolha seu nome na lista --</option>';
+            
+            if (!selectedClass) {
+                studentSelect.disabled = true;
+                document.getElementById('start-btn').disabled = true;
+                return;
+            }
+
+            const filtered = allStudents.filter(s => s.class_name === selectedClass);
+            filtered.forEach(s => {
+                studentSelect.innerHTML += `<option value="${s.id}">${s.name} (${s.team_name})</option>`;
+            });
+
+            studentSelect.disabled = false;
+        });
+
+        document.getElementById('student-select').addEventListener('change', (e) => {
+            document.getElementById('start-btn').disabled = !e.target.value;
+        });
+
+        document.getElementById('start-btn').addEventListener('click', async () => {
+            currentStudentId = document.getElementById('student-select').value;
+            if (!currentStudentId) return;
+
+            const res = await fetch(`/api/team-mates/${currentStudentId}`);
+            teamMates = await res.json();
+
+            if (teamMates.length === 0) {
+                alert('Nenhum colega encontrado nesta equipe.');
+                return;
+            }
+
+            document.getElementById('login-section').classList.add('d-none');
+            const formContainer = document.getElementById('evaluations-container');
+            formContainer.innerHTML = '';
+
+            teamMates.forEach((mate, index) => {
+                formContainer.innerHTML += `
+                    <div class="card mb-4 border-secondary">
+                        <div class="card-header bg-secondary text-white">
+                            <h5>Avaliando o(a) colega: <strong>${mate.name}</strong></h5>
+                        </div>
+                        <div class="card-body">
+                            <input type="hidden" class="mate-id" value="${mate.id}">
+                            <p class="text-muted small">Escala de 1 (Raramente) a 5 (Excepcional)</p>
+                            
+                            ${createRangeQuestion(index, 1, "Qualidade do Código e Entregas")}
+                            ${createRangeQuestion(index, 2, "Resolução de Problemas")}
+                            ${createRangeQuestion(index, 3, "Fundamentação Teórica")}
+                            ${createRangeQuestion(index, 4, "Colaboração e Apoio Mútuo")}
+                            ${createRangeQuestion(index, 5, "Divisão Justa de Tarefas")}
+                            ${createRangeQuestion(index, 6, "Abertura a Feedbacks")}
+                            ${createRangeQuestion(index, 7, "Clareza na Comunicação")}
+                            ${createRangeQuestion(index, 8, "Proatividade e Iniciativa")}
+                            ${createRangeQuestion(index, 9, "Postura e Comprometimento")}
+
+                            <div class="mb-3">
+                                <label class="form-label">Pontos Fortes:</label>
+                                <textarea class="form-control pontos-fortes" rows="2" placeholder="Principais diferenciais..."></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Oportunidades de Desenvolvimento:</label>
+                                <textarea class="form-control oportunidades" rows="2" placeholder="Aspectos a evoluir..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('eval-form').classList.remove('d-none');
+        });
+
+        function createRangeQuestion(index, qNum, labelText) {
+            return `
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">${qNum}. ${labelText}</label>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">1</span>
+                        <input type="range" class="form-range mx-2 q-${qNum}" min="1" max="5" value="3" step="1" oninput="this.nextElementSibling.value = this.value">
+                        <output class="badge bg-secondary">3</output>
+                        <span class="text-muted small ms-2">5</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        document.getElementById('eval-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const cards = document.querySelectorAll('#evaluations-container .card');
+            const evaluations = [];
+
+            cards.forEach(card => {
+                const evaluated_id = card.querySelector('.mate-id').value;
+                evaluations.push({
+                    evaluated_id: evaluated_id,
+                    q_tecnica: card.querySelector('.q-1').value,
+                    q_problemas: card.querySelector('.q-2').value,
+                    q_teoria: card.querySelector('.q-3').value,
+                    q_colaboracao: card.querySelector('.q-4').value,
+                    q_tarefas: card.querySelector('.q-5').value,
+                    q_feedback: card.querySelector('.q-6').value,
+                    q_comunicacao: card.querySelector('.q-7').value,
+                    q_proatividade: card.querySelector('.q-8').value,
+                    q_postura: card.querySelector('.q-9').value,
+                    pontos_fortes: card.querySelector('.pontos-fortes').value,
+                    oportunidades: card.querySelector('.oportunidades').value
+                });
+            });
+
+            const response = await fetch('/api/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ evaluations: evaluations })
+            });
+
+            if (response.ok) {
+                alert('Avaliação enviada com sucesso! Suas respostas foram computadas de forma anônima.');
+                location.reload();
+            } else {
+                alert('Erro ao enviar avaliação.');
+            }
+        });
+
+        loadStudents();
+    </script>
+</body>
+</html>
